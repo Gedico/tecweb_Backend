@@ -20,7 +20,11 @@ const register = async (req, res) => {
 
         const savedUser = await newUser.save();
 
-        res.json(savedUser);
+        res.json({
+            id: savedUser._id,
+            username: savedUser.username,
+            email: savedUser.email
+        });
 
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -33,28 +37,36 @@ const login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        const user = await User.findOne({ email });
+        const error = validateLoginInput(email, password);
+        if (error) {
+            return res.status(400).json({ message: error });
+        }
 
+        const user = await User.findOne({ email });
         if (!user) {
-            return res.status(400).json({ message: "Utente non trovato" });
+            return res.status(400).json({ message: "Credenziali non valide" });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
-
         if (!isMatch) {
-            return res.status(400).json({ message: "Password errata" });
+            return res.status(400).json({ message: "Credenziali non valide" });
         }
 
-        // 🔐 CREAZIONE TOKEN
         const token = jwt.sign(
             { id: user._id },
-            "segreto_super_sicuro",
+            process.env.JWT_SECRET,
             { expiresIn: "1h" }
         );
 
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: false,
+            sameSite: "Strict",
+            maxAge: 3600000
+        });
+
         res.json({
             message: "Login effettuato",
-            token: token,
             user: {
                 id: user._id,
                 username: user.username,
@@ -70,7 +82,32 @@ const login = async (req, res) => {
 
 /******** LOGOUT ***********************************************************************************************************/
 const logout = (req, res) => {
+    res.clearCookie("token", {
+        httpOnly: true,
+        sameSite: "Strict",
+        secure: false // true in produzione HTTPS
+    });
+
     res.json({ message: "Logout effettuato" });
+};
+
+/*** FUNZIONI AUSILIARIE ***************************************************************************************************/
+const validateLoginInput = (email, password) => {
+
+    if (!email || !password) {
+        return "Campi mancanti";
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+        return "Email non valida";
+    }
+    if (password.length < 6) {
+        return "Password troppo corta";
+    }
+
+    return null;
 };
 
 
