@@ -1,115 +1,78 @@
-const User = require("../models/User");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
+const { registerUser, loginUser, checkAuthService } =
+    require("../service/authService");
 
-/***** REGISTER ******************************************************************************************************************/
+/**** REGISTER ******************************************************************/
 const register = async (req, res) => {
     try {
-        const { username, email, password } = req.body;
+        const result = await registerUser(req.body);
 
-        // 1. hash password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        // 2. crea utente con password criptata
-        const newUser = new User({
-            username,
-            email,
-            password: hashedPassword
-        });
-
-        const savedUser = await newUser.save();
-
-        res.json({
-            id: savedUser._id,
-            username: savedUser.username,
-            email: savedUser.email
-        });
+        res.json(result);
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(400).json({ message: err.message });
     }
 };
 
-
-/**** LOGIN ******************************************************************************************************************************/
+/**** LOGIN *****************************************************************************/
 const login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        const error = validateLoginInput(email, password);
-        if (error) {
-            return res.status(400).json({ message: error });
-        }
+        const result = await loginUser(email, password);
 
-        const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(400).json({ message: "Credenziali non valide" });
-        }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(400).json({ message: "Credenziali non valide" });
-        }
-
-        const token = jwt.sign(
-            { id: user._id },
-            process.env.JWT_SECRET,
-            { expiresIn: "1h" }
-        );
-
-        res.cookie("token", token, {
+        res.cookie("token", result.token, {
             httpOnly: true,
-            secure: false,
             sameSite: "Strict",
+            secure: false,
             maxAge: 3600000
         });
 
         res.json({
             message: "Login effettuato",
             user: {
-                id: user._id,
-                username: user.username,
-                email: user.email,
-                punti: user.punti
+                id: result.user._id,
+                username: result.user.username,
+                email: result.user.email,
+                punti: result.user.punti
             }
         });
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(400).json({ message: err.message });
     }
 };
 
-/******** LOGOUT ***********************************************************************************************************/
+
+/*** CHECKAUTH *******************************************************************/
+const checkAuth = (req, res) => {
+
+    const token = req.cookies.token;
+
+    const result = checkAuthService(token);
+
+    if (!result.authenticated) {
+        return res.status(401).json(result);
+    }
+
+    return res.status(200).json(result);
+};
+
+
+
+/**** LOGOUT (RESTA QUI) *******************************************************/
 const logout = (req, res) => {
     res.clearCookie("token", {
         httpOnly: true,
         sameSite: "Strict",
-        secure: false // true in produzione HTTPS
+        secure: false
     });
 
     res.json({ message: "Logout effettuato" });
 };
 
-/*** FUNZIONI AUSILIARIE ***************************************************************************************************/
-const validateLoginInput = (email, password) => {
-
-    if (!email || !password) {
-        return "Campi mancanti";
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailRegex.test(email)) {
-        return "Email non valida";
-    }
-    if (password.length < 6) {
-        return "Password troppo corta";
-    }
-
-    return null;
+module.exports = {
+    register,
+    login,
+    logout,
+    checkAuth
 };
-
-
-/******** EXPORTS *******************************************************************************************************/
-module.exports = { register, login, logout };

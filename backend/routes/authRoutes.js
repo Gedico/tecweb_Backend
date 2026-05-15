@@ -1,16 +1,35 @@
 const express = require("express");
 const router = express.Router();
 
-const { register, login, logout } = require("../controllers/authControllers");
+
+
+/**** CONTROLLERS ******************************************************************/
+const {
+    register,
+    login,
+    logout,
+    checkAuth
+} = require("../controllers/authControllers");
+
+
+/**** MIDDLEWARE *******************************************************************/
 const authMiddleware = require("../middleware/authMiddleware");
 const validateLogin = require("../middleware/validateLogin");
+const loginLimiter = require("../middleware/loginLimiter");
 
-router.post("/login", validateLogin, login);
+
+
+/**** ROUTES PUBBLICHE *************************************************************/
+
 router.post("/register", register);
+router.post("/login", loginLimiter, validateLogin, login);
 router.post("/logout", logout);
 
+router.get("/check", checkAuth);
 
-// 🔐 ROUTE PROTETTA
+
+/**** ROUTE PROTETTA ***************************************************************/
+
 router.get("/profile", authMiddleware, (req, res) => {
     res.json({
         message: "Accesso consentito",
@@ -18,4 +37,6 @@ router.get("/profile", authMiddleware, (req, res) => {
     });
 });
 
+
+/**** EXPORT **********************************************************************/
 module.exports = router;
